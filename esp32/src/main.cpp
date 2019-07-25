@@ -7,8 +7,10 @@ void setup() {
   pinMode(ADS1292_CS_PIN, OUTPUT);
   Serial.begin(115200);
   // inititial packet
-  init_packet();
   init_preference();
+  init_packet();
+  //register event handler
+  WiFi.onEvent(WiFiEvent);
   // create RTOS task
   vTaskPrioritySet(NULL, 2); 
   xTaskCreate(LEDTask, "LED", 1000, NULL, 3, NULL);
@@ -53,18 +55,23 @@ void loop() {
     if(!((LeadStatus & 0x1f) == 0 ))
       leadoff_detected  = true; 
     else
-      leadoff_detected  = false; 
-      //ecg_wave_buff[0] = (int16_t)(s32DaqVals[0] >> 8) ;  // ignore the lower 8 bits out of 24bits
-      //ecg_wave_buff[1] = (int16_t)(s32DaqVals[1] >> 8) ;  
+      leadoff_detected  = false;
+       
     if (leadoff_detected == false) {
-      //ECG_ProcessCurrSample(&ecg_wave_buff[0], &ecg_filterout[0]);   // filter out the line noise @40Hz cutoff 161 order
-      //ECG_ProcessCurrSample(&ecg_wave_buff[1], &ecg_filterout[1]);
-      //QRS_Algorithm_Interface(ecg_filterout[0]);             // calculate 
+      raw_ecg[0] = (int16_t)(s32DaqVals[0] >> 8); //ignore the lower 8 bits out of 24bits (24bit to 16bit conversion)
+      raw_ecg[1] = (int16_t)(s32DaqVals[1] >> 8);  
+      //raw_ecg[0] -= s32noise[0];
+      //raw_ecg[1] -= s32noise[1];
+      ECG_ProcessCurrSample(&raw_ecg[0], &filtered_ecg[0]);   // filter out the line noise @40Hz cutoff 161 order
+      ECG_ProcessCurrSample(&raw_ecg[1], &filtered_ecg[1]);
     } else {
-      //ecg_filterout[0] = 0;
-      //ecg_filterout[1] = 0;
+      filtered_ecg[0] = 0;
+      filtered_ecg[1] = 0;
     }
+    // create packet from filtered_ecg
+    fill_packet(filtered_ecg[0], filtered_ecg[1]);
   }
+  // loop end
   ads1292dataReceived = false;
   SPI_RX_Buff_Count = 0;
 }
@@ -85,14 +92,16 @@ void UDPTask(void *pvParameters) {
   while(true) {
     //only send data when connected
     if(is_wifi_connected){
-      Serial.println("WIFI Connected");
-      //Send a packet
-      //udp.beginPacket(udpAddress.c_str(), udpPort);
-      //udp.printf("Seconds since boot: %u", (uint16_t)(millis()/1000));
-      //udp.endPacket();
+      send_packet();
+    } else if (!is_wifi_connecting) {
+      // Retry to connect WIFI
+      while (!is_wifi_connected) {
+        connectToWiFi();
+        vTaskDelay(5000 / portTICK_PERIOD_MS);
+      }
     }
     //Wait for 1 second
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
   vTaskDelete(NULL);
 }
@@ -103,7 +112,6 @@ void ATCommandTask(void *pvParameters)
   bool isReboot = false;
   int8_t b;
   String tempStr;
-  Serial.println("ATCommand Task");
   for(;;) {
     while ((b = Serial.read()) != -1) {
       if (b == 'A') state = 0;
@@ -123,10 +131,10 @@ void ATCommandTask(void *pvParameters)
         // Set device id to xxxx
         if (command.startsWith("ID")) {
           if (index_of_equal > 0 && tempStr.length() > 0) {
-            preference.putString("ID", tempStr);
+            preference.putUChar("ID", (uint8_t) tempStr.toInt());
             isReboot = true;
           } else {
-            Serial.printf("%s\n", preference.getString("ID", "").c_str());
+            Serial.printf("%u\r\n", preference.getUChar("ID", 0));
           }
         } 
         // ATSSID, ATSSID=xxxx
@@ -136,7 +144,7 @@ void ATCommandTask(void *pvParameters)
             preference.putString("SSID", tempStr);
             isReboot = true;
           } else {
-            Serial.printf("%s\n", preference.getString("SSID", "").c_str());
+            Serial.println(preference.getString("SSID", ""));
           }
         }
         // ATPWD, ATPWD=xxxx
@@ -147,7 +155,11 @@ void ATCommandTask(void *pvParameters)
             isReboot = true;
           } else {
             String pwd = preference.getString("PWD", "");
-            for (int i=0; i<pwd.length(); i++) if (i>1 && i!=pwd.length()-1) Serial.print(pwd[i]);
+            for (int i=0; i<pwd.length(); i++) {
+              if (i>1 && i!=pwd.length()-1) Serial.print('*');
+              else Serial.print(pwd[i]);
+            }
+            Serial.print("\r\n");
           }
         }
         // ATUDP, ATUDP=0.0.0.0
@@ -157,17 +169,17 @@ void ATCommandTask(void *pvParameters)
             preference.putString("UDP", tempStr);
             isReboot = true;
           } else {
-            Serial.printf("%s\n", preference.getString("UDP", "").c_str());
+            Serial.println(preference.getString("UDP", ""));
           }
         }
         // ATPORT, ATPORT=0000
         // Set port of target UDP server
         else if (command.startsWith("PORT")) {
           if (index_of_equal > 0 && tempStr.length() > 0) {
-            preference.putString("PORT", tempStr);
+            preference.putUShort("PORT", (uint16_t) tempStr.toInt());
             isReboot = true;
           } else {
-            Serial.printf("%s\n", preference.getString("PORT", "").c_str());
+            Serial.println(preference.getUShort("PORT", 0));
           }
         }
         preference.end();
