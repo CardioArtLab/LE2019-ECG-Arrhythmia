@@ -5,6 +5,7 @@ void setup() {
   pinMode(ADS1292_DRDY_PIN, INPUT);
   pinMode(ADS1292_START_PIN, OUTPUT);
   pinMode(ADS1292_CS_PIN, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(ADS1292_DRDY_PIN), DRDYHandler, FALLING);
   Serial.begin(115200);
   // inititial packet
   init_preference();
@@ -12,30 +13,33 @@ void setup() {
   //register event handler
   WiFi.onEvent(WiFiEvent);
   // create RTOS task
-  vTaskPrioritySet(NULL, 2); 
-  xTaskCreate(LEDTask, "LED", 1000, NULL, 3, NULL);
+  vTaskPrioritySet(NULL, 1);
+  loop_task = xTaskGetCurrentTaskHandle();
+  xTaskCreate(LEDTask, "LED", 1000, NULL, 4, NULL);
+  xTaskCreate(ATCommandTask, "ATCom", 4096, NULL, 3, NULL);
   xTaskCreate(UDPTask, "UDP", 4096, NULL, 2, NULL);
-  xTaskCreate(ATCommandTask, "ATCom", 4096, NULL, 1, NULL);
   // ADS init
   ADS1292.spi_Init(18, 19, 23, 4);
-  ADS1292.ads1292_Init();  //initalize ADS1292 slave
+  ADS1292.ads1292_Init(&is_ads1292_init);  //initalize ADS1292 slave
 }
 
 uint8_t i,j;
-uint32_t uecgtemp;
+uint32_t uecgtemp, DRDY_notify = 0;
 int32_t secgtemp, status_byte;
-void loop() {
-
-  if (digitalRead(ADS1292_DRDY_PIN) == LOW) {
+void loop()
+{
+  DRDY_notify = ulTaskNotifyTake(pdTRUE, 10 / portTICK_PERIOD_MS);
+  if (DRDY_notify > 0) {
     SPI_RX_Buff_Ptr = ADS1292.ads1292_Read_Data(); // Read the data,point the data to a pointer
     for (i = 0; i < 9; i++)
     {
       SPI_RX_Buff[SPI_RX_Buff_Count++] = *(SPI_RX_Buff_Ptr + i);  // store the result data in array
     }
     ads1292dataReceived = true;
+    DRDY_counter++;
   }
 
-  if (ads1292dataReceived) {
+  if (ads1292dataReceived && (DRDY_counter % 4) == 3) {
     j = 0;
     for (i = 3; i < 9; i += 3)         // data outputs is (24 status bits + 24 bits Respiration data +  24 bits ECG data)
     {
@@ -59,21 +63,29 @@ void loop() {
        
     if (leadoff_detected == false) {
       raw_ecg[0] = (int16_t)(s32DaqVals[0] >> 8); //ignore the lower 8 bits out of 24bits (24bit to 16bit conversion)
-      raw_ecg[1] = (int16_t)(s32DaqVals[1] >> 8);  
-      //raw_ecg[0] -= s32noise[0];
-      //raw_ecg[1] -= s32noise[1];
-      ECG_ProcessCurrSample(&raw_ecg[0], &filtered_ecg[0]);   // filter out the line noise @40Hz cutoff 161 order
-      ECG_ProcessCurrSample(&raw_ecg[1], &filtered_ecg[1]);
+      raw_ecg[1] = (int16_t)(s32DaqVals[1] >> 8);
+      filtered_ecg[0] = raw_ecg[0]; filtered_ecg[1] = raw_ecg[1];
+      //ECG_ProcessCurrSample(&raw_ecg[0], &filtered_ecg[0]);   // filter out the line noise @40Hz cutoff 161 order
+      //ECG_ProcessCurrSample(&raw_ecg[1], &filtered_ecg[1]);
     } else {
       filtered_ecg[0] = 0;
       filtered_ecg[1] = 0;
     }
     // create packet from filtered_ecg
     fill_packet(filtered_ecg[0], filtered_ecg[1]);
+    // clear received flag and buffer count
+    ads1292dataReceived = false;
+    SPI_RX_Buff_Count = 0;
   }
-  // loop end
-  ads1292dataReceived = false;
-  SPI_RX_Buff_Count = 0;
+}
+
+void IRAM_ATTR DRDYHandler(void)
+{
+  if (!is_ads1292_init) return;
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+  configASSERT(loop_task != NULL);
+  vTaskNotifyGiveFromISR(loop_task, &xHigherPriorityTaskWoken);
+  portYIELD_FROM_ISR();
 }
 
 void LEDTask(void *pvParameters) {
@@ -183,6 +195,10 @@ void ATCommandTask(void *pvParameters)
           }
         }
         preference.end();
+        if (command.startsWith("TEST")) {
+          Serial.println("TEST MODE");
+          ADS1292.ads1292_Test_Mode();
+        }
         if (isReboot) ESP.restart();
       } else {
         state = -1;

@@ -5,7 +5,7 @@
 #include "ads1292.h"
 #include "filter.h"
 
-#define PACKET_TX_BUFFER_NUMBER 10    // 1 packet / 300 msec x 3 sec
+#define PACKET_TX_BUFFER_NUMBER 30    // 1 packet / 300 msec x 3 sec
 #define PACKET_TX_BUFFER_SIZE   1205   // 2 Channel x 300 records x 2 byte + 5 header byte (ADS1292 1000 SPS)
 #define PACKET_START_1          0xCA
 #define PACKET_START_2          0xFE
@@ -17,11 +17,9 @@
 #define PACKET_INDEX_OF_ID(x) (x % PACKET_TX_BUFFER_NUMBER)
 
 //== ADS1292 variables ===============================
-#define NOISE_OFFSET_COUNT      5000
 ads1292 ADS1292;
 
 volatile int32_t s32DaqVals[2];
-volatile double s32noise[2] = {0,0};
 volatile byte SPI_RX_Buff[15] ;
 volatile static int SPI_RX_Buff_Count = 0;
 volatile char *SPI_RX_Buff_Ptr;
@@ -29,7 +27,9 @@ volatile bool ads1292dataReceived = false;
 volatile byte LeadStatus=0;
 volatile bool leadoff_detected = true;
 int16_t raw_ecg[2], filtered_ecg[2];
-uint16_t noise_offset_count = 0;
+volatile bool is_ads1292_init = false;
+
+volatile uint8_t DRDY_counter = 0;
 //== end ADS1292 variables ===========================
 
 //== packet variables ================================
@@ -55,6 +55,8 @@ Preferences preference;
 void LEDTask(void *pvParameters);
 void UDPTask(void *pvParameters);
 void ATCommandTask(void * pvParameters);
+void DRDYHandler(void);
+TaskHandle_t loop_task = NULL;
 //== END TASKS ========================================
 
 void init_packet() {

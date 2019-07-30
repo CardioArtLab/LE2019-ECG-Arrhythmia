@@ -49,7 +49,7 @@ void ads1292::spi_Init(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss)
   SPI.setClockDivider(SPI_CLOCK_DIV16);
 }
 
-void ads1292::ads1292_Init()
+void ads1292::ads1292_Init(volatile bool *is_init)
 {
   ads1292_Reset();
   delay(1000);
@@ -60,20 +60,20 @@ void ads1292::ads1292_Init()
   ads1292_Start_Data_Conv_Command();
   ads1292_Soft_Stop();
   delay(50);
-  ads1292_Stop_Read_Data_Continuous();					// SDATAC command
+  ads1292_Stop_Read_Data_Continuous();	// SDATAC command
   delay(300);
-  
+
   ads1292_Reg_Write(ADS1292_REG_CONFIG1, 0b00000011); //Set sampling rate to 1000 SPS
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CONFIG2, 0b10110011);	//Lead-off comp off, test signal disabled, 4.033-Vref (for 5V analog supply)
+  ads1292_Reg_Write(ADS1292_REG_CONFIG2, 0b11110000);	//Lead-off comp on, test signal disabled, 4.033-Vref (for 5V analog supply)
+  delay(10);
+  ads1292_Reg_Write(ADS1292_REG_CH1SET, 0b00000000);	//Ch 1 enabled, gain 6, input shorten for noise measurement
+  delay(10);
+  ads1292_Reg_Write(ADS1292_REG_CH2SET, 0b00000000);	//Ch 2 enabled, gain 6, input shorten for noise measurement
   delay(10);
   ads1292_Reg_Write(ADS1292_REG_LOFF, 0b00010000);		//Lead-off defaults
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CH1SET, 0b00000101);	//Ch 1 enabled, gain 6, input shorten for noise measurement
-  delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CH2SET, 0b10000001);	//Ch 2 enabled, gain 6, input shorten for noise measurement
-  delay(10);
-  ads1292_Reg_Write(ADS1292_REG_RLDSENS, 0b00111111);	//RLD settings: fmod/16, RLD enabled, RLD inputs from Ch2 only
+  ads1292_Reg_Write(ADS1292_REG_RLDSENS, 0b00111100);	//RLD settings: fmod/16, RLD enabled, RLD inputs from Ch2 only
   delay(10);
   ads1292_Reg_Write(ADS1292_REG_LOFFSENS, 0x0f);		//LOFF settings: all disabled
   delay(10);
@@ -81,7 +81,26 @@ void ads1292::ads1292_Init()
   delay(10);
   ads1292_Reg_Write(ADS1292_REG_RESP2, 0b00000011);		//Respiration: Calib OFF, respiration freq defaults
   delay(10);
-  ads1292_Start_Read_Data_Continuous();
+  *is_init = true;
+  ads1292_Start_Read_Data_Continuous(); // RDATAC command
+  delay(10);
+  ads1292_Enable_Start();
+}
+
+void ads1292::ads1292_Test_Mode()
+{
+  ads1292_Hard_Stop();
+  ads1292_Soft_Stop();
+  delay(50);
+  ads1292_Stop_Read_Data_Continuous(); // SDATAC command
+  delay(300);
+  ads1292_Reg_Write(ADS1292_REG_CONFIG2, 0b10110011);	//Lead-off comp off, test signal enabled
+  delay(10);
+  ads1292_Reg_Write(ADS1292_REG_CH1SET, 0b00000101);	//Ch 1 enabled, gain 6, input shorten for noise measurement
+  delay(10);
+  ads1292_Reg_Write(ADS1292_REG_CH2SET, 0b10000001);	//Ch 2 enabled, gain 6, input shorten for noise measurement
+  delay(10);
+  ads1292_Start_Read_Data_Continuous(); // RDATAC command
   delay(10);
   ads1292_Enable_Start();
 }

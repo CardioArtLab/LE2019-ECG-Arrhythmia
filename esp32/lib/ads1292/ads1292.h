@@ -69,7 +69,8 @@ class ads1292
 {
   public:
     static void spi_Init(uint8_t sck = -1, uint8_t miso = -1, uint8_t mosi = -1, uint8_t ss = -1);
-    static void ads1292_Init(void);
+    static void ads1292_Init(volatile bool *is_init);
+    static void ads1292_Test_Mode(void);
     static void ads1292_Reset(void);
 	  static void ads1292_Reg_Write (unsigned char READ_WRITE_ADDRESS, unsigned char DATA);
 	  static byte ads1292_Reg_Read (unsigned char READ_WRITE_ADDRESS);

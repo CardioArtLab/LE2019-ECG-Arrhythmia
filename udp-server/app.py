@@ -5,6 +5,8 @@ for messages from the ESP32 board and prints them
 import socketserver
 import threading
 import queue
+from statistics import median
+from math import sqrt
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
 
@@ -19,6 +21,13 @@ ch2_data = []
 
 INT16_MAX = 2**15-1
 UINT16_MAX = 2**16
+MAX_RECORD = 30
+HAMPEL_WINDOW = 5
+SG_FILTER_WINDOW = 11
+SG_COFF = [-42,-21,-2,15,30,43,54,63,70,75,78,79,78,75,70,63,54,43,30,15,-2,-21,-42]
+SG_H = 805
+#SG_COFF = [-253,-138,-33,62,147,222,287,343,387,422,447,462,467,462,444,422,387,343,287,222,147,62,-33,-138,-253]
+#SG_H = 5175
 
 class MyUDPHandler(socketserver.BaseRequestHandler):
     '''
@@ -39,8 +48,8 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
                     ch1 -= UINT16_MAX
                 if ch2 > INT16_MAX:
                     ch2 -= UINT16_MAX
-                ch1_data.append(ch1*4.033/INT16_MAX)
-                ch2_data.append(ch2*4.033/INT16_MAX)
+                ch1_data.append(ch1)
+                ch2_data.append(ch2)
             q.put_nowait((ch1_data, ch2_data))
             print(device_id, packet_id)
 
@@ -58,7 +67,7 @@ def reader():
             q.task_done()
             # stop condition
             count += 1
-            if count > 10:
+            if count > MAX_RECORD:
                 shutdownEvent.set()
         except queue.Empty:
             if shutdownEvent.is_set():
@@ -82,7 +91,35 @@ if __name__ == "__main__":
         server.shutdown()
         reader_thread.join()
         # after stop show plot
-        plt.plot(ch1_data, '-r', label='ch1', markersize=3)
-        plt.plot(ch2_data, '--g', label='ch2', markersize=3)
-        plt.legend()
+        length_ch1 = len(ch1_data)
+        for i in range(length_ch1):
+            # Hampel filter: remove outliner
+            if i-HAMPEL_WINDOW >= 0:
+                start_i = i-HAMPEL_WINDOW
+            else:
+                start_i = 0
+            seq = ch1_data[start_i:i+HAMPEL_WINDOW]
+            if len(seq) > 0:
+                m = median(seq)
+                sd = 0
+                for x in seq:
+                    sd += (x - m)**2
+                sd = sqrt(sd / len(seq))
+                if abs(ch1_data[i] - m) > 1.5*sd:
+                    ch1_data[i] = m
+        ch1_filtered = []
+        for i in range(length_ch1):
+            # Savitzky-Golay filter
+            if i-SG_FILTER_WINDOW >= 0:
+                start_i = i-SG_FILTER_WINDOW
+            else:
+                start_i = 0
+            seq = ch1_data[start_i:i+SG_FILTER_WINDOW]
+            _sum = 0
+            for ii in range(len(seq)):
+                _sum += seq[ii] * SG_COFF[ii]
+            ch1_filtered.append(_sum/SG_H+50)
+        plt.plot(ch1_filtered, 'r', label='ch1', markersize=1, linewidth=1)
+        plt.plot(ch1_data, 'g', label='ch2', markersize=1, linewidth=0.5)
+        #plt.legend()
         plt.show()
