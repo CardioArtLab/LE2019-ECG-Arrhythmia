@@ -30,16 +30,16 @@ void loop()
 {
   DRDY_notify = ulTaskNotifyTake(pdTRUE, 10 / portTICK_PERIOD_MS);
   if (DRDY_notify > 0) {
+    if ((DRDY_counter % 4) != 0) return;
     SPI_RX_Buff_Ptr = ADS1292.ads1292_Read_Data(); // Read the data,point the data to a pointer
     for (i = 0; i < 9; i++)
     {
       SPI_RX_Buff[SPI_RX_Buff_Count++] = *(SPI_RX_Buff_Ptr + i);  // store the result data in array
     }
     ads1292dataReceived = true;
-    DRDY_counter++;
   }
 
-  if (ads1292dataReceived && (DRDY_counter % 4) == 3) {
+  if (ads1292dataReceived) {
     j = 0;
     for (i = 3; i < 9; i += 3)         // data outputs is (24 status bits + 24 bits Respiration data +  24 bits ECG data)
     {
@@ -84,6 +84,7 @@ void IRAM_ATTR DRDYHandler(void)
   if (!is_ads1292_init) return;
   BaseType_t xHigherPriorityTaskWoken = pdFALSE;
   configASSERT(loop_task != NULL);
+  DRDY_counter++;
   vTaskNotifyGiveFromISR(loop_task, &xHigherPriorityTaskWoken);
   portYIELD_FROM_ISR();
 }

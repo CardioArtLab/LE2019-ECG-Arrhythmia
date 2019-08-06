@@ -9,6 +9,7 @@ from statistics import median
 from math import sqrt
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
+from scipy.signal import savgol_filter
 
 # fast and light-weight plotting style
 # https://matplotlib.org/tutorials/introductory/usage.html#sphx-glr-tutorials-introductory-usage-py
@@ -21,7 +22,7 @@ ch2_data = []
 
 INT16_MAX = 2**15-1
 UINT16_MAX = 2**16
-MAX_RECORD = 30
+MAX_RECORD = 10
 HAMPEL_WINDOW = 5
 SG_FILTER_WINDOW = 11
 SG_COFF = [-42,-21,-2,15,30,43,54,63,70,75,78,79,78,75,70,63,54,43,30,15,-2,-21,-42]
@@ -73,6 +74,61 @@ def reader():
             if shutdownEvent.is_set():
                 break
             
+def hampel(data = [], window=HAMPEL_WINDOW, k=1.5):
+    length_data = len(data)
+    for i in range(length_data):
+            # Hampel filter: remove outliner
+            if i-window >= 0:
+                start_i = i-window
+            else:
+                start_i = 0
+            seq = data[start_i:i+window]
+            if len(seq) > 0:
+                m = median(seq)
+                sd = 0
+                for x in seq:
+                    sd += (x - m)**2
+                sd = sqrt(sd / len(seq))
+                if abs(data[i] - m) > k*sd:
+                    data[i] = m
+    return data
+
+def smooth(data=[]):
+    filtered = []
+    length_data = len(data)
+    for i in range(length_data):
+        # Savitzky-Golay filter
+        if i-SG_FILTER_WINDOW >= 0:
+            start_i = i-SG_FILTER_WINDOW
+        else:
+            start_i = 0
+        seq = data[start_i:i+SG_FILTER_WINDOW]
+        _sum = 0
+        for ii in range(len(seq)):
+            _sum += seq[ii] * SG_COFF[ii]
+        filtered.append(_sum/SG_H)
+    return filtered
+
+def kalman(data=[]):
+    Q = 1e-5 # process variance
+    # allocate space for arrays
+    xhat=[data[0]]
+    P=[1.0]
+    xhatminus=[0]
+    Pminus=[0]
+    K=[0]
+    R = 0.0001 # estimate of measurement variance, change to see effect
+
+    for k in range(1,len(data)):
+        # time update
+        xhatminus.append(xhat[k-1])
+        Pminus.append(P[k-1]+Q)
+
+        # measurement update
+        K.append( Pminus[k]/( Pminus[k]+R ) )
+        xhat.append( xhatminus[k]+K[k]*(data[k]-xhatminus[k]) )
+        P.append( (1-K[k])*Pminus[k] )
+    return xhat
 
 if __name__ == "__main__":
     HOST, PORT = "0.0.0.0", 3333
@@ -91,35 +147,25 @@ if __name__ == "__main__":
         server.shutdown()
         reader_thread.join()
         # after stop show plot
-        length_ch1 = len(ch1_data)
-        for i in range(length_ch1):
-            # Hampel filter: remove outliner
-            if i-HAMPEL_WINDOW >= 0:
-                start_i = i-HAMPEL_WINDOW
-            else:
-                start_i = 0
-            seq = ch1_data[start_i:i+HAMPEL_WINDOW]
-            if len(seq) > 0:
-                m = median(seq)
-                sd = 0
-                for x in seq:
-                    sd += (x - m)**2
-                sd = sqrt(sd / len(seq))
-                if abs(ch1_data[i] - m) > 1.5*sd:
-                    ch1_data[i] = m
-        ch1_filtered = []
-        for i in range(length_ch1):
-            # Savitzky-Golay filter
-            if i-SG_FILTER_WINDOW >= 0:
-                start_i = i-SG_FILTER_WINDOW
-            else:
-                start_i = 0
-            seq = ch1_data[start_i:i+SG_FILTER_WINDOW]
-            _sum = 0
-            for ii in range(len(seq)):
-                _sum += seq[ii] * SG_COFF[ii]
-            ch1_filtered.append(_sum/SG_H+50)
-        plt.plot(ch1_filtered, 'r', label='ch1', markersize=1, linewidth=1)
-        plt.plot(ch1_data, 'g', label='ch2', markersize=1, linewidth=0.5)
-        #plt.legend()
+        
+        ch1 = kalman(savgol_filter(hampel(ch1_data, HAMPEL_WINDOW, 1.5), 41, 1))
+        ch2 = kalman(savgol_filter(hampel(ch2_data, HAMPEL_WINDOW, 1.5), 41, 1))
+     
+        ch3 = []
+        aVR = []
+        aVL = []
+        aVF = []
+        for i in range(len(ch1)):
+            ch3.append(ch2[i] - ch1[i])
+            aVR.append(-0.5*(ch1[i]+ch2[i]))
+            aVL.append(ch1[i]-0.5*ch2[i])
+            aVF.append(ch2[i]-0.5*ch1[i])        
+        
+        plt.plot(ch1, 'g', label='lead I', markersize=1, linewidth=0.5)
+        plt.plot(ch2, 'r', label='lead II', markersize=1, linewidth=0.5)
+        plt.plot(ch3, 'y', label='lead III', markersize=1, linewidth=0.5)
+        plt.plot(aVR, 'b', label='aVR', markersize=1, linewidth=0.5)
+        plt.plot(aVL, 'w', label='aVL', markersize=1, linewidth=0.5)
+        plt.plot(aVF, 'c', label='aVF', markersize=1, linewidth=0.5)
+        plt.legend()
         plt.show()

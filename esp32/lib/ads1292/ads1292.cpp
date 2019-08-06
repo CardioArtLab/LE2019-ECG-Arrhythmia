@@ -67,13 +67,13 @@ void ads1292::ads1292_Init(volatile bool *is_init)
   delay(10);
   ads1292_Reg_Write(ADS1292_REG_CONFIG2, 0b11110000);	//Lead-off comp on, test signal disabled, 4.033-Vref (for 5V analog supply)
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CH1SET, 0b00000000);	//Ch 1 enabled, gain 6, input shorten for noise measurement
+  ads1292_Reg_Write(ADS1292_REG_CH1SET, 0b00000000);	//Ch 1 enabled, gain 6, 
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CH2SET, 0b00000000);	//Ch 2 enabled, gain 6, input shorten for noise measurement
+  ads1292_Reg_Write(ADS1292_REG_CH2SET, 0b00000000);	//Ch 2 enabled, gain 6, 
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_LOFF, 0b00010000);		//Lead-off defaults
+  ads1292_Reg_Write(ADS1292_REG_LOFF, 0b00010001);		//Lead-off defaults
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_RLDSENS, 0b00111100);	//RLD settings: fmod/16, RLD enabled, RLD inputs from Ch2 only
+  ads1292_Reg_Write(ADS1292_REG_RLDSENS, 0b00110000);	//RLD settings: fmod/16, RLD enabled, RLD inputs from Ch2 only
   delay(10);
   ads1292_Reg_Write(ADS1292_REG_LOFFSENS, 0x0f);		//LOFF settings: all disabled
   delay(10);
