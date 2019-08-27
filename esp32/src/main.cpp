@@ -13,11 +13,11 @@ void setup() {
   //register event handler
   WiFi.onEvent(WiFiEvent);
   // create RTOS task
-  vTaskPrioritySet(NULL, 1);
+  vTaskPrioritySet(NULL, 2);
   loop_task = xTaskGetCurrentTaskHandle();
   xTaskCreate(LEDTask, "LED", 1000, NULL, 4, NULL);
   xTaskCreate(ATCommandTask, "ATCom", 4096, NULL, 3, NULL);
-  xTaskCreate(UDPTask, "UDP", 4096, NULL, 2, NULL);
+  xTaskCreate(UDPTask, "UDP", 4096, NULL, 1, NULL);
   // ADS init
   ADS1292.spi_Init(18, 19, 23, 4);
   ADS1292.ads1292_Init(&is_ads1292_init);  //initalize ADS1292 slave
@@ -28,10 +28,15 @@ uint32_t uecgtemp, DRDY_notify = 0;
 int32_t secgtemp, status_byte;
 void loop()
 {
-  DRDY_notify = ulTaskNotifyTake(pdTRUE, 10 / portTICK_PERIOD_MS);
+  DRDY_notify = ulTaskNotifyTake(pdTRUE, 1);
   if (DRDY_notify > 0) {
-    if ((DRDY_counter % 4) != 0) return;
     SPI_RX_Buff_Ptr = ADS1292.ads1292_Read_Data(); // Read the data,point the data to a pointer
+    //*
+    if ((DRDY_counter % 4) != 0) {
+      SPI_RX_Buff_Count = 0;
+      return;
+    }
+    //*/
     for (i = 0; i < 9; i++)
     {
       SPI_RX_Buff[SPI_RX_Buff_Count++] = *(SPI_RX_Buff_Ptr + i);  // store the result data in array
@@ -43,7 +48,6 @@ void loop()
     j = 0;
     for (i = 3; i < 9; i += 3)         // data outputs is (24 status bits + 24 bits Respiration data +  24 bits ECG data)
     {
-
       uecgtemp = (unsigned long) (  ((unsigned long)SPI_RX_Buff[i + 0] << 16) | ( (unsigned long) SPI_RX_Buff[i + 1] << 8) |  (unsigned long) SPI_RX_Buff[i + 2]);
       uecgtemp = (unsigned long) (uecgtemp << 8);
       secgtemp = (signed long) (uecgtemp);
@@ -93,9 +97,9 @@ void LEDTask(void *pvParameters) {
   pinMode(LED_BUILTIN, OUTPUT);
   for (;;) {
     digitalWrite(LED_BUILTIN, HIGH);
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     digitalWrite(LED_BUILTIN, LOW);
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
   vTaskDelete(NULL);
 }
@@ -113,8 +117,8 @@ void UDPTask(void *pvParameters) {
         vTaskDelay(5000 / portTICK_PERIOD_MS);
       }
     }
-    //Wait for 1 second
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    //Wait for 0.1 second
+    vTaskDelay(500 / portTICK_PERIOD_MS);
   }
   vTaskDelete(NULL);
 }
@@ -199,13 +203,15 @@ void ATCommandTask(void *pvParameters)
         if (command.startsWith("TEST")) {
           Serial.println("TEST MODE");
           ADS1292.ads1292_Test_Mode();
+        } else if (command.startsWith("LOFF")) {
+          Serial.println(LeadStatus, 2);
         }
         if (isReboot) ESP.restart();
       } else {
         state = -1;
       }
     }
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
   vTaskDelete(NULL);
 }

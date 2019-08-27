@@ -9,7 +9,7 @@ from statistics import median
 from math import sqrt
 import matplotlib.pyplot as plt
 import matplotlib.style as mplstyle
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, butter, sosfilt,cheby2
 
 # fast and light-weight plotting style
 # https://matplotlib.org/tutorials/introductory/usage.html#sphx-glr-tutorials-introductory-usage-py
@@ -22,7 +22,7 @@ ch2_data = []
 
 INT16_MAX = 2**15-1
 UINT16_MAX = 2**16
-MAX_RECORD = 10
+MAX_RECORD = 4
 HAMPEL_WINDOW = 5
 SG_FILTER_WINDOW = 11
 SG_COFF = [-42,-21,-2,15,30,43,54,63,70,75,78,79,78,75,70,63,54,43,30,15,-2,-21,-42]
@@ -37,12 +37,12 @@ class MyUDPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         data = self.request[0].strip()
         #socket = self.request[1]
-        if (data[0] == 0xCA and data[1] == 0xFE and data[-1] == 0xCD):
+        if (data[0] == 0xCA and data[1] == 0xFE and data[-1] == 0x03):
             device_id = (data[2])
             packet_id = (data[3])
             ch1_data = []
             ch2_data = []
-            for i in range(4, 1204, 4):
+            for i in range(4, 1004, 4):
                 ch1 = (((data[i]) << 8) | (data[i+1]))
                 ch2 = (((data[i+2]) << 8) | (data[i+3]))
                 if ch1 > INT16_MAX:
@@ -68,7 +68,7 @@ def reader():
             q.task_done()
             # stop condition
             count += 1
-            if count > MAX_RECORD:
+            if count >= MAX_RECORD:
                 shutdownEvent.set()
         except queue.Empty:
             if shutdownEvent.is_set():
@@ -76,6 +76,7 @@ def reader():
             
 def hampel(data = [], window=HAMPEL_WINDOW, k=1.5):
     length_data = len(data)
+    filtered = []
     for i in range(length_data):
             # Hampel filter: remove outliner
             if i-window >= 0:
@@ -90,8 +91,10 @@ def hampel(data = [], window=HAMPEL_WINDOW, k=1.5):
                     sd += (x - m)**2
                 sd = sqrt(sd / len(seq))
                 if abs(data[i] - m) > k*sd:
-                    data[i] = m
-    return data
+                    filtered.append(m)
+                else:
+                    filtered.append(data[i])
+    return filtered
 
 def smooth(data=[]):
     filtered = []
@@ -148,9 +151,18 @@ if __name__ == "__main__":
         reader_thread.join()
         # after stop show plot
         
-        ch1 = kalman(savgol_filter(hampel(ch1_data, HAMPEL_WINDOW, 1.5), 41, 1))
-        ch2 = kalman(savgol_filter(hampel(ch2_data, HAMPEL_WINDOW, 1.5), 41, 1))
-     
+        
+        ch1 = hampel(ch1_data, HAMPEL_WINDOW, 1)
+        ch2 = hampel(ch2_data, HAMPEL_WINDOW, 1)
+      
+        #ch2 = kalman(ch2_data)
+        sos = cheby2(20,40, 45, 'lowpass', fs=250, output='sos')
+        
+       # sos1 = butter(20, 45, 'lowpass', fs=250, output='sos')
+       # ch2b = sosfilt(sos1, ch2)
+        ch1 = sosfilt(sos, ch1)
+        ch2 = sosfilt(sos, ch2)
+        '''
         ch3 = []
         aVR = []
         aVL = []
@@ -160,12 +172,15 @@ if __name__ == "__main__":
             aVR.append(-0.5*(ch1[i]+ch2[i]))
             aVL.append(ch1[i]-0.5*ch2[i])
             aVF.append(ch2[i]-0.5*ch1[i])        
-        
+        '''
         plt.plot(ch1, 'g', label='lead I', markersize=1, linewidth=0.5)
         plt.plot(ch2, 'r', label='lead II', markersize=1, linewidth=0.5)
+      #  plt.plot(ch2b, 'w', label='lead IIb', markersize=1, linewidth=0.5)
+        '''
         plt.plot(ch3, 'y', label='lead III', markersize=1, linewidth=0.5)
         plt.plot(aVR, 'b', label='aVR', markersize=1, linewidth=0.5)
         plt.plot(aVL, 'w', label='aVL', markersize=1, linewidth=0.5)
         plt.plot(aVF, 'c', label='aVF', markersize=1, linewidth=0.5)
+        '''
         plt.legend()
         plt.show()

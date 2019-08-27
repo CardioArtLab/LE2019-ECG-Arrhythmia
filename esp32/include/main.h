@@ -5,11 +5,11 @@
 #include "ads1292.h"
 #include "filter.h"
 
-#define PACKET_TX_BUFFER_NUMBER 30    // 1 packet / 300 msec x 3 sec
-#define PACKET_TX_BUFFER_SIZE   1205   // 2 Channel x 300 records x 2 byte + 5 header byte (ADS1292 1000 SPS)
+#define PACKET_TX_BUFFER_NUMBER 10    // 1 packet / 300 msec x 3 sec
+#define PACKET_TX_BUFFER_SIZE   1005   // 2 Channel x 250 records x 2 byte + 5 header byte (ADS1292 250 SPS)
 #define PACKET_START_1          0xCA
 #define PACKET_START_2          0xFE
-#define PACKET_END              0xCD
+#define PACKET_END              0x03
 #define PACKET_DEVICE_ID_OFFSET 2
 #define PACKET_PACKET_ID_OFFSET 3
 #define PACKET_FIRST_OFFSET     4

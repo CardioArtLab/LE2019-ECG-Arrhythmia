@@ -26,13 +26,10 @@ char* ads1292::ads1292_Read_Data()
   static char SPI_Dummy_Buff[10];
    
   digitalWrite(ADS1292_CS_PIN, LOW);
-   
 	for (int i = 0; i < 9; ++i)
 	{
 		SPI_Dummy_Buff[i] = SPI.transfer(CONFIG_SPI_MASTER_DUMMY);
-		
 	}
-
   digitalWrite(ADS1292_CS_PIN, HIGH);
 	
 	return SPI_Dummy_Buff;
@@ -45,8 +42,8 @@ void ads1292::spi_Init(uint8_t sck, uint8_t miso, uint8_t mosi, uint8_t ss)
   SPI.setBitOrder(MSBFIRST); 
   //CPOL = 0, CPHA = 1
   SPI.setDataMode(SPI_MODE1);
-  // Selecting 1Mhz clock for SPI
-  SPI.setClockDivider(SPI_CLOCK_DIV16);
+  // Selecting 8Mhz clock for SPI
+  SPI.setClockDivider(SPI_CLOCK_DIV2);
 }
 
 void ads1292::ads1292_Init(volatile bool *is_init)
@@ -63,17 +60,17 @@ void ads1292::ads1292_Init(volatile bool *is_init)
   ads1292_Stop_Read_Data_Continuous();	// SDATAC command
   delay(300);
 
-  ads1292_Reg_Write(ADS1292_REG_CONFIG1, 0b00000011); //Set sampling rate to 1000 SPS
+  ads1292_Reg_Write(ADS1292_REG_CONFIG1, 0b00000001); //Set sampling rate to 250 SPS
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CONFIG2, 0b11110000);	//Lead-off comp on, test signal disabled, 4.033-Vref (for 5V analog supply)
+  ads1292_Reg_Write(ADS1292_REG_CONFIG2, 0b10110000);	//Lead-off comp on, test signal disabled, 4.033-Vref (for 5V analog supply)
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CH1SET, 0b00000000);	//Ch 1 enabled, gain 6, 
+  ads1292_Reg_Write(ADS1292_REG_CH1SET, 0b01100000);	//Ch 1 enabled, gain 12, 
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_CH2SET, 0b00000000);	//Ch 2 enabled, gain 6, 
+  ads1292_Reg_Write(ADS1292_REG_CH2SET, 0b01100000);	//Ch 2 enabled, gain 12, 
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_LOFF, 0b00010001);		//Lead-off defaults
+  ads1292_Reg_Write(ADS1292_REG_LOFF, 0b00010000);		//Lead-off defaults
   delay(10);
-  ads1292_Reg_Write(ADS1292_REG_RLDSENS, 0b00110000);	//RLD settings: fmod/16, RLD enabled, RLD inputs from Ch2 only
+  ads1292_Reg_Write(ADS1292_REG_RLDSENS, 0b00101100);	//RLD settings: fmod/16, RLD enabled, RLD inputs from Ch2 only
   delay(10);
   ads1292_Reg_Write(ADS1292_REG_LOFFSENS, 0x0f);		//LOFF settings: all disabled
   delay(10);
@@ -212,11 +209,9 @@ byte ads1292::ads1292_Reg_Read (unsigned char READ_WRITE_ADDRESS)
 {
   byte temp;
   digitalWrite(ADS1292_CS_PIN, LOW);
-  delayMicroseconds(10);
   SPI.transfer(READ_WRITE_ADDRESS | RREG); //Send register location
   SPI.transfer(0x03);		//number of register to read
   temp = SPI.transfer(0xff);
-  delayMicroseconds(10);
   digitalWrite(ADS1292_CS_PIN, HIGH);
   return temp;
 }
