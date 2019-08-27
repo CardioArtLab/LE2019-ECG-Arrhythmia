@@ -1,0 +1,7 @@
+__pycache__/
+cnn3/
+dataset/
+mitdb/
+saved/
+irhythm_2017/*
+resnet34/

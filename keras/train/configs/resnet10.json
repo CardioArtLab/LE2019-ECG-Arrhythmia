@@ -1,0 +1,24 @@
+{
+    "input_size": [1536,1],
+    "output_size": 3,
+    "model": "models.resnet34-2019",
+    "train": "dataset/6/train.mat",
+    "dev": "dataset/6/dev.mat",
+    "test": "dataset/6/test.mat",
+
+    "conv_subsample_lengths": [2, 2, 2, 2],
+    "conv_filter_length": 24,
+    "conv_num_filters_start": 32,
+    "conv_init": "he_normal",
+    "conv_activation": "relu",
+    "conv_dropout": 0.2,
+    "conv_num_skip": 2,
+    "conv_increase_channels_at": 1,
+    "conv_last_size": 96,
+
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 100,
+    
+    "save_dir": "saved"
+}

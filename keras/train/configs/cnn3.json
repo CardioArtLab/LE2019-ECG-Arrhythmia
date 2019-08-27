@@ -1,0 +1,14 @@
+{
+    "input_size": 1536,
+    "output_size": 3,
+    "model": "models.cnn3",
+    "train": "dataset/1/train.mat",
+    "dev": "dataset/1/dev.mat",
+    "test": "dataset/1/test.mat",
+
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 100,
+    
+    "save_dir": "saved"
+}

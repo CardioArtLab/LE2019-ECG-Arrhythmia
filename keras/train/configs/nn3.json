@@ -1,0 +1,14 @@
+{
+    "input_size": 1536,
+    "output_size": 3,
+    "model": "models.nn3",
+    "train": "dataset/5/train.mat",
+    "dev": "dataset/5/dev.mat",
+    "test": "dataset/5/test.mat",
+
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 100,
+    
+    "save_dir": "saved"
+}
